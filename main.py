@@ -46,41 +46,16 @@ def get_page_version(page_id):
     return page['version']['number']
 
 def set_full_width_property(page_id):
-    prop_key = "content-appearance-published"
+    prop_key_published = "content-appearance-published"
+    prop_key_draft = "content-appearance-draft"
     value = "full-width"
-
-    try:
-        # Hole die Property (wenn vorhanden)
-        prop = get_content_property(page_id, prop_key)
-
-        # Wenn vorhanden: Property-Version hochzählen
-        prop_version = prop['version']['number'] + 1
-        print(f"Updating property for page {page_id}, prop version {prop_version}")
-
-        data = {
-            "key": prop_key,
-            "value": value,
-            "version": {"number": prop_version}
-        }
-
-        # PUT für Update
-        endpoint = f"/rest/api/content/{page_id}/property/{prop_key}"
-        response = confluence.put(endpoint, data=data)
-
-    except Exception as e:
-        # Property existiert vermutlich nicht → POST als Fallback
-        print(f"Creating new property for page {page_id}")
-        version = get_page_version(page_id)
-
-        data = {
-            "key": prop_key,
-            "value": value,
-            "version": {"number": version}
-        }
-
-        response = confluence.post(f"/rest/api/content/{page_id}/property", data=data)
-
-    print(f"✔️ Done for page {page_id}: {response}")
+    data = {
+        prop_key_published: value,
+        prop_key_draft: value,
+    }
+    props = confluence.get_page_properties(page_id)
+    print(props)
+    confluence.set_page_property(page_id, data)
 
     
 
@@ -103,12 +78,14 @@ limit = 50
 set_full_width = True
 
 ### testing ...
-# page_id = 1087151283
+page_id = 1087147723
+set_full_width_property(page_id)
+
 # content = confluence.get_page_by_id(page_id, expand='body.storage,version')
 # body = content['body']['storage']['value']
 # print(body)
 
-# exit(0)
+exit(0)
 # ###
 
 # generate patterns to make all smart links to pages in isms-public explicit:
@@ -154,7 +131,7 @@ while True:
     count += limit
 
 # use this to specify explicitly which page to update (for testing)
-pages = [ {'id': 1087144269, 'title': 'A.6.02 Beschäftigungs- und Vertragsbedingungen'} ]
+#pages = [ {'id': 1087144269, 'title': 'A.6.02 Beschäftigungs- und Vertragsbedingungen'} ]
 #
 
 # update pages in target space
