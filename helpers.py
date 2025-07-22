@@ -1,3 +1,6 @@
+import requests
+from requests.auth import HTTPBasicAuth
+
 HTML_ESCAPE_MAP = {
     'ä': '&auml;',
     'ö': '&ouml;',
@@ -21,17 +24,63 @@ def get_page_version(confluence, page_id):
     page = confluence.get(f"/rest/api/content/{page_id}?expand=version")
     return page['version']['number']
 
-def get_all_pages_from_space(confluence, limit):
+def get_all_pages_from_space(confluence, target_space, pagination=50):
     pages = []
+    count = 0
     while True:
-        print(f"Getting all pages from space ({count}-{count+limit}) ...")
-        results = confluence.get_all_pages_from_space(target_space, start=count, limit=limit)
+        print(f"Getting all pages from space ({len(pages)}) ...")
+        results = confluence.get_all_pages_from_space(target_space, start=count, limit=pagination)
         if not results:
             break
         pages.extend(results)
-        count += limit
+        count += pagination
+    return pages
 
-def update_pages(confluence, base_url, target_space, pages, limit, dry_run, patterns):
+def download_page_body(confluence, page_id):
+    content = confluence.get_page_by_id(page_id, expand='body.storage,version')
+    body = content['body']['storage']['value']
+    return body
+
+def update_confluence_page_v2(base_url, email, api_token, page_id, title, body):
+    auth = HTTPBasicAuth(email, api_token)
+
+    # 1. Get current version
+    version_resp = requests.get(
+        f'{base_url}/api/v2/pages/{page_id}',
+        auth=auth,
+        headers={'Accept': 'application/json'}
+    )
+    version_resp.raise_for_status()
+    current_version = version_resp.json()['version']['number']
+
+    # 2. Update the page
+    payload = {
+        "id": page_id,
+        "status": "current",
+        "title": title,
+        "body": {
+            "representation": "storage",
+            "value": body
+        },
+        "version": {
+            "number": current_version + 1
+        }
+    }
+
+    update_resp = requests.put(
+        f'{base_url}/api/v2/pages/{page_id}',
+        auth=auth,
+        headers={
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+        },
+        json=payload
+    )
+    update_resp.raise_for_status()
+
+    return update_resp.json()
+
+def update_pages(confluence, email, api_token, base_url, target_space, pages, patterns, limit=0, dry_run=True):
     count = 0
     updated_pages = []
     ids_used = []
@@ -60,13 +109,14 @@ def update_pages(confluence, base_url, target_space, pages, limit, dry_run, patt
         if action:
             should_update = not dry_run and (limit == 0) or (len(updated_pages) < limit)
             if should_update:
-                confluence.update_page(
-                    page_id=page_id,
-                    title=title,
-                    body=body,
-                    type='page',
-                    representation='storage'
-                )
+                update_confluence_page_v2(base_url, email, api_token, page_id, title, body)
+                # confluence.update_page(
+                #     page_id=page_id,
+                #     title=title,
+                #     body=body,
+                #     type='page',
+                #     representation='storage'
+                # )
                 page_url = f"{base_url}/spaces/{target_space}/pages/{page_id}"
                 updated_pages.append({
                     "title": title,
