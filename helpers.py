@@ -1,0 +1,79 @@
+HTML_ESCAPE_MAP = {
+    'ä': '&auml;',
+    'ö': '&ouml;',
+    'ü': '&uuml;',
+    'Ä': '&Auml;',
+    'Ö': '&Ouml;',
+    'Ü': '&Uuml;',
+    'ß': '&szlig;',
+}
+
+def escape_umlauts(text):
+    """Wandelt deutsche Umlaute in HTML-Entities um."""
+    for char, entity in HTML_ESCAPE_MAP.items():
+        text = text.replace(char, entity)
+    return text
+
+def get_content_property(confluence, page_id, prop_key):
+    return confluence.get(f"/rest/api/content/{page_id}/property/{prop_key}")
+
+def get_page_version(confluence, page_id):
+    page = confluence.get(f"/rest/api/content/{page_id}?expand=version")
+    return page['version']['number']
+
+def get_all_pages_from_space(confluence, limit):
+    pages = []
+    while True:
+        print(f"Getting all pages from space ({count}-{count+limit}) ...")
+        results = confluence.get_all_pages_from_space(target_space, start=count, limit=limit)
+        if not results:
+            break
+        pages.extend(results)
+        count += limit
+
+def update_pages(confluence, base_url, target_space, pages, limit, dry_run, patterns):
+    count = 0
+    updated_pages = []
+    ids_used = []
+    divider = 50
+    for page in pages:
+        if count % divider == 0:
+            print(f"Checking pages ({count}-{count+divider}) / ({len(pages)}) ...")
+        
+        page_id = page['id']
+        if page_id in ids_used:
+            continue
+        ids_used.append(page_id)
+        title = page['title']
+
+        content = confluence.get_page_by_id(page_id, expand='body.storage,version')
+        body = content['body']['storage']['value']
+        action = False
+        
+        for pattern in patterns:
+            old_pattern = pattern['old_pattern']
+            new_pattern = pattern['new_pattern']
+            if old_pattern in body:
+                action = True
+                body = body.replace(old_pattern, new_pattern)
+            
+        if action:
+            should_update = not dry_run and (limit == 0) or (len(updated_pages) < limit)
+            if should_update:
+                confluence.update_page(
+                    page_id=page_id,
+                    title=title,
+                    body=body,
+                    type='page',
+                    representation='storage'
+                )
+                page_url = f"{base_url}/spaces/{target_space}/pages/{page_id}"
+                updated_pages.append({
+                    "title": title,
+                    "url": page_url
+                })
+
+            print(f"{'Did not update' if not should_update else 'Updated'} page: {title}")
+
+        count += 1
+    return count, updated_pages
