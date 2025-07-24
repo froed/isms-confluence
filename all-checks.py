@@ -24,11 +24,11 @@ ISMS_SPACE = 'isms2025'
 ISMS_SPACE_PUBLIC = 'ISMSpublic'
 
 # config
-target_space = ISMS_SPACE
+target_spaces = [ISMS_SPACE, ISMS_SPACE_PUBLIC]
 
 dry_run = False
-limit = 50
 
+# define patterns
 AT_FREDERIK_SCHAAF = '<ri:user ri:account-id="712020:3722c289-95b2-4ac0-aa48-d43e373b9d7a"'
 VERANTWORTLICH = 'Verantwortlich'
 VERANTWORTLICH_FREDERIK = 'Verantwortlich</strong></p></th><td colspan="2"><p><ac:link><ri:user ri:account-id="712020:3722c289-95b2-4ac0-aa48-d43e373b9d7a"'
@@ -44,15 +44,15 @@ patterns = [
     }
 ]
 
-#print(emit_page_body(confluence, "1087146008"))
-#exit(0)
+for target_space in target_spaces:
+    print(f"examining space: {target_space} ...")
 
-pages = get_unique_pages_from_space(confluence, target_space)
-print(f"Found {len(pages)} pages.")
+    # find all pages
+    pages = get_unique_pages_from_space(confluence, target_space)
+    print(f"Found {len(pages)} pages.")
 
-#result = update_pages(confluence=confluence, email=username, api_token=password, base_url=confluence_base_url, target_space=target_space, pages=pages, patterns=patterns, limit=1, dry_run=dry_run)
+    # widen
+    result = widen_thin_pages(confluence_base_url, username, password, pages, target_space, dry_run=dry_run)
 
-#result = widen_thin_pages(confluence_base_url, username, password, pages, target_space, dry_run=dry_run)
-result = find_pages_with_pattern(confluence, confluence_base_url, target_space, pages, patterns)
-# for page in result:
-#     print(f"{page["title"]}: {page["url"]}")
+    # find bad patterns
+    result = find_pages_with_pattern(confluence, confluence_base_url, target_space, pages, patterns)
