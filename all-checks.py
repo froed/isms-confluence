@@ -47,12 +47,15 @@ patterns = [
 for target_space in target_spaces:
     print(f"examining space: {target_space} ...")
 
-    # find all pages
+    print("finding all pages ...")
     pages = get_unique_pages_from_space(confluence, target_space)
     print(f"Found {len(pages)} pages.")
 
-    # widen
+    print("widen ...")
     result = widen_thin_pages(confluence_base_url, username, password, pages, target_space, dry_run=dry_run)
 
-    # find bad patterns
+    print("finding bad patterns ...")
     result = find_pages_with_pattern(confluence, confluence_base_url, target_space, pages, patterns)
+
+    print("updating ""Freigabe am"" ...")
+    update_freigabe_am(confluence, confluence_base_url, username, password, target_space, pages, dry_run)

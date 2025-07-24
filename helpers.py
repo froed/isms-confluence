@@ -1,5 +1,9 @@
 import requests
 from requests.auth import HTTPBasicAuth
+import json
+import os
+import re
+from datetime import datetime
 
 HTML_ESCAPE_MAP = {
     'ä': '&auml;',
@@ -24,7 +28,7 @@ def get_page_version(confluence, page_id):
     page = confluence.get(f"/rest/api/content/{page_id}?expand=version")
     return page['version']['number']
 
-def get_all_pages_from_space(confluence, target_space, pagination=50):
+def get_all_pages_from_space(confluence, target_space, pagination=100):
     pages = []
     count = 0
     while True:
@@ -36,7 +40,7 @@ def get_all_pages_from_space(confluence, target_space, pagination=50):
         count += pagination
     return pages
 
-def get_unique_pages_from_space(confluence, target_space, pagination=50):
+def get_unique_pages_from_space(confluence, target_space, pagination=100):
     pages = []
     seen_ids = set()
     count = 0
@@ -120,7 +124,7 @@ def find_pages_with_pattern(confluence, base_url, target_space, pages, patterns,
     """
     matched_pages = []
     check_count = 0
-    divider = 50
+    divider = 100
 
     for page in pages:
 
@@ -161,7 +165,7 @@ def update_pages(confluence, email, api_token, base_url, target_space, pages, pa
     check_count = 0
     updated_pages = []
     ids_used = []
-    divider = 50
+    divider = 100
     for page in pages:
         if check_count % divider == 0:
             print(f"Checking pages ({check_count}/{len(pages)}) ...")
@@ -220,7 +224,7 @@ def widen_thin_pages(base_url, email, api_token, pages, target_space, dry_run=Tr
     total = len(pages)
 
     for i, page in enumerate(pages):
-        if i % 50 == 0:
+        if i % 100 == 0:
             print(f"Progress: Checked {i} of {total} pages...")
 
         page_id = page.get("id")
@@ -293,3 +297,128 @@ def widen_thin_pages(base_url, email, api_token, pages, target_space, dry_run=Tr
         "checked": total,
         "widened": updated_pages
     }
+
+def cache(key: str, miss_fn, use=True, cache_dir='cache'):
+    """
+    Cache function to store/retrieve JSON-serializable objects.
+
+    Args:
+        key (str): Identifier for the cache.
+        miss_fn (callable): Function (usually a lambda) to call if cache is missing or use=False.
+        use (bool): Whether to use the cache or not. If False, always refresh using miss_fn.
+        cache_dir (str): Directory to store cache files.
+
+    Returns:
+        Cached data (loaded from cache or result of miss_fn).
+    """
+    os.makedirs(cache_dir, exist_ok=True)
+    filename = os.path.join(cache_dir, f'{key}.json')
+
+    if use and os.path.exists(filename):
+        with open(filename, 'r') as f:
+            return json.load(f)
+    else:
+        result = miss_fn()
+        with open(filename, 'w') as f:
+            json.dump(result, f, indent=2)
+        return result
+    
+def get_last_modified(confluence, page_id):
+    """
+    Returns the last modified timestamp of a Confluence page.
+
+    Args:
+        confluence: Confluence API client object.
+        page_id (str or int): The ID of the Confluence page.
+
+    Returns:
+        str: ISO 8601 formatted timestamp of last modification.
+    """
+    page = confluence.get_page_by_id(page_id, expand='version')
+    if not page or 'version' not in page:
+        raise ValueError(f"Could not retrieve page or version info for page_id={page_id}")
+    
+    return page['version']['when']
+
+import re
+from datetime import datetime
+
+def update_freigabe_date_if_needed(confluence, page_id, dry_run=False):
+    """
+    Updates the 'Freigabe am' date in the page body if the page was modified after that date.
+
+    Args:
+        confluence: Confluence API client.
+        page_id (str or int): ID of the page to check and possibly update.
+        dry_run (bool): If True, show what would be updated without actually modifying the page.
+
+    Returns:
+        bool: True if update is (or would be) needed.
+        dict: Info with old date, modified date, and new date (if applicable).
+    """
+    page = confluence.get_page_by_id(page_id, expand='body.storage,version')
+    if not page:
+        raise ValueError(f"Page not found: {page_id}")
+
+    html = page['body']['storage']['value']
+    modified_str = page['version']['when']
+    modified_dt = datetime.fromisoformat(modified_str.rstrip('Z'))
+
+    # Look for Freigabe am datetime
+    match = re.search(r'(<strong>Freigabe am</strong>.*?<time datetime=")(\d{4}-\d{2}-\d{2})(")', html, re.DOTALL)
+    if not match:
+        return False, {
+            "updated": False,
+            "reason": "not found",
+        }
+
+    freigabe_str = match.group(2)
+    freigabe_dt = datetime.strptime(freigabe_str, "%Y-%m-%d")
+
+    if modified_dt.date() <= freigabe_dt.date():
+        return False, {
+            "updated": False,
+            "reason": "Last modified is not newer than 'Freigabe am'",
+            "freigabe_am": freigabe_dt.isoformat(),
+            "last_modified": modified_dt.isoformat()
+        }
+
+    today_str = datetime.today().strftime("%Y-%m-%d")
+    updated_html = html[:match.start(2)] + today_str + html[match.end(2):]
+
+    if dry_run:
+        return True, {
+            "updated": False,
+            "dry_run": True,
+            "would_update": True,
+            "old_date": freigabe_str,
+            "new_date": today_str,
+            "last_modified": modified_dt.isoformat()
+        }
+
+    # Perform the update
+    confluence.update_page(
+        page_id=page_id,
+        title=page['title'],
+        body=updated_html,
+        minor_edit=True
+    )
+
+    return True, {
+        "updated": True,
+        "dry_run": False,
+        "old_date": freigabe_str,
+        "new_date": today_str,
+        "last_modified": modified_dt.isoformat()
+    }
+
+def make_page_url(space, id):
+    return f"https://quantrefy.atlassian.net/wiki/spaces/{space}/pages/{id}"
+
+def update_freigabe_am(confluence, base_url, email, api_token, target_space, pages, dry_run):
+    for page in pages:
+        updated, info = update_freigabe_date_if_needed(confluence, page["id"], dry_run)
+        if updated:
+            print(f"Updated page: {make_page_url(target_space, page["id"])}, info: {info}")
+            widen_thin_pages(base_url, email, api_token, [{"id": page["id"]}], target_space, dry_run)
+            

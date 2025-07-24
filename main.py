@@ -25,34 +25,41 @@ ISMS_SPACE_PUBLIC = 'ISMSpublic'
 
 # config
 target_space = ISMS_SPACE
-
 dry_run = False
-limit = 50
+use_cache = True
 
 AT_FREDERIK_SCHAAF = '<ri:user ri:account-id="712020:3722c289-95b2-4ac0-aa48-d43e373b9d7a"'
+FREIGABE_DURCH_FREDDY = 'Freigabe durch</strong></p></th><td colspan="2"><p><ac:link><ri:user ri:account-id="712020:3722c289-95b2-4ac0-aa48-d43e373b9d7a"'
+FREIGABE_DURCH_ENRICO = 'Freigabe durch</strong></p></th><td colspan="2"><p><ac:link><ri:user ri:account-id="712020:0b17fa08-4976-44ad-9737-f08bb77db445"'
+FREIGABE_AM = 'Freigabe am'
+REVIEW_DURCHGEFÜHRT_AM = escape_umlauts('Review durchgeführt am')
 VERANTWORTLICH = 'Verantwortlich'
 VERANTWORTLICH_FREDERIK = 'Verantwortlich</strong></p></th><td colspan="2"><p><ac:link><ri:user ri:account-id="712020:3722c289-95b2-4ac0-aa48-d43e373b9d7a"'
 VERANTWORTLICH_ENRICO = 'Verantwortlich</strong></p></th><td colspan="2"><p><ac:link><ri:user ri:account-id="712020:3722c289-95b2-4ac0-aa48-d43e373b9d7a"'
-REVIEW_DURCHGEFÜHRT_AM = escape_umlauts('Review durchgeführt am')
-FREIGABE_DURCH_FREDDY = 'Freigabe durch</strong></p></th><td colspan="2"><p><ac:link><ri:user ri:account-id="712020:3722c289-95b2-4ac0-aa48-d43e373b9d7a"'
-FREIGABE_DURCH_ENRICO = 'Freigabe durch</strong></p></th><td colspan="2"><p><ac:link><ri:user ri:account-id="712020:0b17fa08-4976-44ad-9737-f08bb77db445"'
+
+# print(emit_page_body(confluence, "1087143970"))
+# exit(0)
 
 patterns = [
     {
-        'old_pattern': FREIGABE_DURCH_FREDDY,
-        'new_pattern': FREIGABE_DURCH_ENRICO
+        'old_pattern': FREIGABE_AM,
     }
 ]
 
-#print(emit_page_body(confluence, "1087146008"))
-#exit(0)
-
-pages = get_unique_pages_from_space(confluence, target_space)
+pages = cache(f"PAGES_{target_space}", lambda: get_unique_pages_from_space(confluence, target_space), use=use_cache)
 print(f"Found {len(pages)} pages.")
+
+
+for page in pages:
+    updated, info = update_freigabe_date_if_needed(confluence, page["id"], dry_run)
+    if updated:
+        print(f"Updated page: {make_page_url(target_space, page["id"])}")
+        break
 
 #result = update_pages(confluence=confluence, email=username, api_token=password, base_url=confluence_base_url, target_space=target_space, pages=pages, patterns=patterns, limit=1, dry_run=dry_run)
 
 #result = widen_thin_pages(confluence_base_url, username, password, pages, target_space, dry_run=dry_run)
-result = find_pages_with_pattern(confluence, confluence_base_url, target_space, pages, patterns)
-# for page in result:
-#     print(f"{page["title"]}: {page["url"]}")
+# result = find_pages_with_pattern(confluence, confluence_base_url, target_space, pages, patterns)
+# for item in result:
+#     print(f"Title: {item['title']}: URL: {item['url']}")
+    
