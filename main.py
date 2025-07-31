@@ -36,27 +36,30 @@ REVIEW_DURCHGEFÜHRT_AM = escape_umlauts('Review durchgeführt am')
 VERANTWORTLICH = 'Verantwortlich'
 VERANTWORTLICH_FREDERIK = 'Verantwortlich</strong></p></th><td colspan="2"><p><ac:link><ri:user ri:account-id="712020:3722c289-95b2-4ac0-aa48-d43e373b9d7a"'
 VERANTWORTLICH_ENRICO = 'Verantwortlich</strong></p></th><td colspan="2"><p><ac:link><ri:user ri:account-id="712020:3722c289-95b2-4ac0-aa48-d43e373b9d7a"'
+INTERN_LABEL = '<ac:parameter ac:name="colour">Yellow</ac:parameter><ac:parameter ac:name="title">INTERN</ac:parameter>'
 
-# print(emit_page_body(confluence, "1087143970"))
+# print(emit_page_body(confluence, "285376513"))
 # exit(0)
 
 patterns = [
     {
-        'old_pattern': FREIGABE_AM,
+        'old_pattern': INTERN_LABEL,
     }
 ]
 
 pages = cache(f"PAGES_{target_space}", lambda: get_unique_pages_from_space(confluence, target_space), use=use_cache)
 print(f"Found {len(pages)} pages.")
 
+# for page in pages:
+#     updated, info = update_freigabe_date_if_needed(confluence, page["id"], dry_run)
+#     if updated:
+#         print(f"Updated page: {make_page_url(target_space, page["id"])}")
+#         break
 
-for page in pages:
-    updated, info = update_freigabe_date_if_needed(confluence, page["id"], dry_run)
-    if updated:
-        print(f"Updated page: {make_page_url(target_space, page["id"])}")
-        break
+result = find_pages_with_pattern(confluence, confluence_base_url, target_space, pages, patterns)
+print(result)
 
-#result = update_pages(confluence=confluence, email=username, api_token=password, base_url=confluence_base_url, target_space=target_space, pages=pages, patterns=patterns, limit=1, dry_run=dry_run)
+# result = update_pages(confluence=confluence, email=username, api_token=password, base_url=confluence_base_url, target_space=target_space, pages=pages, patterns=patterns, limit=0, dry_run=dry_run)
 
 #result = widen_thin_pages(confluence_base_url, username, password, pages, target_space, dry_run=dry_run)
 # result = find_pages_with_pattern(confluence, confluence_base_url, target_space, pages, patterns)
